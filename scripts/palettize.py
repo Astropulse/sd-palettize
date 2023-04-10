@@ -7,39 +7,70 @@ import numpy as np
 from PIL import Image
 
 from modules import images
-from modules.processing import Processed, process_images
-from modules.shared import opts, cmd_opts, state
-
-from torch import Tensor
-from torch.nn import Conv2d
-from torch.nn import functional as F
-from torch.nn.modules.utils import _pair
-from typing import Optional
+from modules.processing import process_images
+from modules.shared import opts
 
 script_dir = scripts.basedir()
 
+def adjust_gamma(image, gamma=1.0):
+    # Create a lookup table for the gamma function
+    gamma_map = [255 * ((i / 255.0) ** (1.0 / gamma)) for i in range(256)]
+    gamma_table = bytes([(int(x / 255.0 * 65535.0) >> 8) for x in gamma_map] * 3)
+
+    # Apply the gamma correction using the lookup table
+    return image.point(gamma_table)
+
 # Runs cv2 k_means quantization on the provided image with "k" color indexes
-def palettize(img,k,d):
-        image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        image = Image.fromarray(image).convert("RGB")
-        
-        if d > 0:
-            if k <= 64:
+def palettize(input, colors, palImg, dithering, strength):
+    img = cv2.cvtColor(input, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(img).convert("RGB")
 
-                img_indexed = image.quantize(colors=k, method=1, kmeans=k, dither=0).convert('RGB')
+    dithering += 1
 
-                palette = []
-                for i in img_indexed.convert("RGB").getcolors(16777216): 
-                    palette.append(i[1])
-                palette = hitherdither.palette.Palette(palette)
-                img_indexed = hitherdither.ordered.yliluoma.yliluomas_1_ordered_dithering(image, palette, order=2**d).convert('RGB')
-            else:
-                img_indexed = image.quantize(colors=k, method=1, kmeans=k, dither=0).convert('RGB')
+    if palImg != None:
+        palImg = cv2.cvtColor(palImg, cv2.COLOR_BGR2RGB)
+        palImg = Image.fromarray(palImg).convert("RGB")
+        numColors = len(palImg.getcolors(16777216))
+    else:
+        numColors = colors
+
+    palette = []
+
+    threshold = (16*strength)/4
+    
+    if palImg != None:
+
+        numColors = len(palImg.getcolors(16777216))
+
+        if strength > 0:
+            img = adjust_gamma(img, 1.0-(0.02*strength))
+            for i in palImg.getcolors(16777216): 
+                palette.append(i[1])
+            palette = hitherdither.palette.Palette(palette)
+            img_indexed = hitherdither.ordered.bayer.bayer_dithering(img, palette, [threshold, threshold, threshold], order=2**dithering).convert('RGB')
         else:
-            img_indexed = image.quantize(colors=k, method=1, kmeans=k, dither=0).convert('RGB')
+            for i in palImg.getcolors(16777216):
+                palette.append(i[1][0])
+                palette.append(i[1][1])
+                palette.append(i[1][2])
+            palImg = Image.new('P', (256, 1))
+            palImg.putpalette(palette)
+            img_indexed = img.quantize(method=1, kmeans=numColors, palette=palImg, dither=0).convert('RGB')
+    elif colors > 0:
 
-        result = cv2.cvtColor(np.asarray(img_indexed), cv2.COLOR_RGB2BGR)
-        return result
+        if strength > 0:
+            img_indexed = img.quantize(colors=colors, method=1, kmeans=colors, dither=0).convert('RGB')
+            img = adjust_gamma(img, 1.0-(0.03*strength))
+            for i in img_indexed.convert("RGB").getcolors(16777216): 
+                palette.append(i[1])
+            palette = hitherdither.palette.Palette(palette)
+            img_indexed = hitherdither.ordered.bayer.bayer_dithering(img, palette, [threshold, threshold, threshold], order=2**dithering).convert('RGB')
+
+        else:
+            img_indexed = img.quantize(colors=colors, method=1, kmeans=colors, dither=0).convert('RGB')
+
+    result = cv2.cvtColor(np.asarray(img_indexed), cv2.COLOR_RGB2BGR)
+    return result
 
 class Script(scripts.Script):
     def title(self):
@@ -51,15 +82,19 @@ class Script(scripts.Script):
         downscale = gr.Checkbox(label='Downscale before processing', value=True)
         with gr.Row():
             scale = gr.Slider(minimum=2, maximum=32, step=1, label='Downscale factor', value=8)
-            dither = gr.Slider(minimum=0, maximum=3, step=1, label='Dithering', value=0)
+        with gr.Row():
+            dither = gr.Dropdown(choices=["Bayer 2x2", "Bayer 4x4", "Bayer 8x8"], label="Matrix Size", value="Bayer 8x8", type="index")
+            ditherStrength = gr.Slider(minimum=0, maximum=10, step=1, label='Dithering Strength', value=0)
+        with gr.Row():
+            palette = gr.Image(label="Palette image")
 
-        return [downscale, scale, clusters, dither]
+        return [downscale, scale, palette, clusters, dither, ditherStrength]
 
-    def run(self, p, downscale, scale, clusters, dither):
+    def run(self, p, downscale, scale, palette, clusters, dither, ditherStrength):
         
-        if dither > 0:
+        if ditherStrength > 0:
             if clusters <= 64:
-                print(f'Palettizing output to {clusters} colors with order {2**dither} dithering...')
+                print(f'Palettizing output to {clusters} colors with order {2**(dither+1)} dithering...')
             else:
                 print('Palette too large, max colors for dithering is 64.')
                 print(f'Palettizing output to {clusters} colors...')
@@ -77,7 +112,7 @@ class Script(scripts.Script):
             if downscale:
                 img = cv2.resize(img, (int(img.shape[1]/scale), int(img.shape[0]/scale)), interpolation = cv2.INTER_LINEAR)
 
-            img = palettize(img, clusters, dither)
+            img = palettize(img, clusters, palette, dither, ditherStrength)
 
             if downscale:
                 img = cv2.resize(img, (int(img.shape[1]*scale), int(img.shape[0]*scale)), interpolation = cv2.INTER_NEAREST)
