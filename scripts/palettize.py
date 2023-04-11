@@ -79,7 +79,9 @@ class Script(scripts.Script):
         return True
     def ui(self, is_img2img):
         clusters = gr.Slider(minimum=2, maximum=128, step=1, label='Colors in palette', value=24)
-        downscale = gr.Checkbox(label='Downscale before processing', value=True)
+        with gr.Row():
+            downscale = gr.Checkbox(label='Downscale before processing', value=True)
+            original = gr.Checkbox(label='Show original images', value=False)
         with gr.Row():
             scale = gr.Slider(minimum=2, maximum=32, step=1, label='Downscale factor', value=8)
         with gr.Row():
@@ -88,9 +90,9 @@ class Script(scripts.Script):
         with gr.Row():
             palette = gr.Image(label="Palette image")
 
-        return [downscale, scale, palette, clusters, dither, ditherStrength]
+        return [downscale, original, scale, palette, clusters, dither, ditherStrength]
 
-    def run(self, p, downscale, scale, palette, clusters, dither, ditherStrength):
+    def run(self, p, downscale, original, scale, palette, clusters, dither, ditherStrength):
         
         if ditherStrength > 0:
             if clusters <= 64:
@@ -107,14 +109,19 @@ class Script(scripts.Script):
 
         grid = False
 
-        if opts.return_grid:
+        if opts.return_grid and p.batch_size*p.n_iter > 1:
             generations += 1
             grid = True
+
+        originalImgs = []
 
         for i in range(generations):
             # Converts image from "Image" type to numpy array for cv2
 
             img = np.array(processed.images[i]).astype(np.uint8)
+
+            if original:
+                originalImgs.append(img)
 
             if downscale:
                 img = cv2.resize(img, (int(img.shape[1]/scale), int(img.shape[0]/scale)), interpolation = cv2.INTER_LINEAR)
@@ -132,5 +139,8 @@ class Script(scripts.Script):
         
                 if opts.grid_save:
                     images.save_image(processed.images[0], p.outpath_grids, "palettized", prompt=p.prompt, seed=processed.seed, grid=True, p=p)
+
+        if original:
+            processed.images.extend(originalImgs)
 
         return processed
