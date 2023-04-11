@@ -105,8 +105,15 @@ class Script(scripts.Script):
 
         generations = p.batch_size*p.n_iter
 
-        for i in range(generations + int(generations > 1)):
+        grid = False
+
+        if generations + int(generations > 1) < len(processed.images):
+            generations += 1
+            grid = True
+
+        for i in range(generations):
             # Converts image from "Image" type to numpy array for cv2
+
             img = np.array(processed.images[i]).astype(np.uint8)
 
             if downscale:
@@ -120,11 +127,10 @@ class Script(scripts.Script):
             processed.images[i] = Image.fromarray(img)
             images.save_image(processed.images[i], p.outpath_samples, "palettized", processed.seed + i, processed.prompt, opts.samples_format, info=processed.info, p=p)
 
-            if generations > 1:
-                grid = images.image_grid(processed.images[1:generations+1], p.batch_size)
-                processed.images[0] = grid
-            
-            if opts.grid_save:
-                images.save_image(processed.images[0], p.outpath_grids, "palettized", prompt=p.prompt, seed=processed.seed, grid=True, p=p)
+            if grid:
+                processed.images[0] = images.image_grid(processed.images[1:generations+1], p.batch_size)
+        
+                if opts.grid_save:
+                    images.save_image(processed.images[0], p.outpath_grids, "palettized", prompt=p.prompt, seed=processed.seed, grid=True, p=p)
 
         return processed
