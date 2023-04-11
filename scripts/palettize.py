@@ -95,11 +95,7 @@ class Script(scripts.Script):
     def run(self, p, downscale, original, scale, palette, clusters, dither, ditherStrength):
         
         if ditherStrength > 0:
-            if clusters <= 64:
-                print(f'Palettizing output to {clusters} colors with order {2**(dither+1)} dithering...')
-            else:
-                print('Palette too large, max colors for dithering is 64.')
-                print(f'Palettizing output to {clusters} colors...')
+            print(f'Palettizing output to {clusters} colors with order {2**(dither+1)} dithering...')
         else:
             print(f'Palettizing output to {clusters} colors...')
 
