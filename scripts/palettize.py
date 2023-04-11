@@ -107,7 +107,7 @@ class Script(scripts.Script):
 
         grid = False
 
-        if generations + int(generations > 1) < len(processed.images):
+        if generations < len(processed.images):
             generations += 1
             grid = True
 
@@ -128,7 +128,7 @@ class Script(scripts.Script):
             images.save_image(processed.images[i], p.outpath_samples, "palettized", processed.seed + i, processed.prompt, opts.samples_format, info=processed.info, p=p)
 
             if grid:
-                processed.images[0] = images.image_grid(processed.images[1:generations+1], p.batch_size)
+                processed.images[0] = images.image_grid(processed.images[1:generations], p.batch_size)
         
                 if opts.grid_save:
                     images.save_image(processed.images[0], p.outpath_grids, "palettized", prompt=p.prompt, seed=processed.seed, grid=True, p=p)
