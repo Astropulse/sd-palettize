@@ -27,7 +27,7 @@ def palettize(input, colors, palImg, dithering, strength):
 
     dithering += 1
 
-    if palImg != None:
+    if palImg is not None:
         palImg = cv2.cvtColor(palImg, cv2.COLOR_BGR2RGB)
         palImg = Image.fromarray(palImg).convert("RGB")
         numColors = len(palImg.getcolors(16777216))
@@ -38,7 +38,7 @@ def palettize(input, colors, palImg, dithering, strength):
 
     threshold = (16*strength)/4
     
-    if palImg != None:
+    if palImg is not None:
 
         numColors = len(palImg.getcolors(16777216))
 
