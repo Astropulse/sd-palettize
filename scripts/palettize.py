@@ -107,7 +107,7 @@ class Script(scripts.Script):
 
         grid = False
 
-        if generations < len(processed.images):
+        if opts.return_grid:
             generations += 1
             grid = True
 
