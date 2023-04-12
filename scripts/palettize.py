@@ -5,12 +5,20 @@ import gradio as gr
 import cv2
 import numpy as np
 from PIL import Image
+import os, requests
+from io import BytesIO
 
 from modules import images
 from modules.processing import process_images
+from modules.ui import create_refresh_button
 from modules.shared import opts
 
 script_dir = scripts.basedir()
+
+def refreshPalettes():
+    palettes = ["None"]
+    palettes.extend(os.listdir('./extensions/sd-palettize/palettes/'))
+    return palettes
 
 def adjust_gamma(image, gamma=1.0):
     # Create a lookup table for the gamma function
@@ -78,6 +86,7 @@ class Script(scripts.Script):
     def show(self, is_img2img):
         return True
     def ui(self, is_img2img):
+
         clusters = gr.Slider(minimum=2, maximum=128, step=1, label='Colors in palette', value=24)
         with gr.Row():
             downscale = gr.Checkbox(label='Downscale before processing', value=True)
@@ -88,16 +97,30 @@ class Script(scripts.Script):
             dither = gr.Dropdown(choices=["Bayer 2x2", "Bayer 4x4", "Bayer 8x8"], label="Matrix Size", value="Bayer 8x8", type="index")
             ditherStrength = gr.Slider(minimum=0, maximum=10, step=1, label='Dithering Strength', value=0)
         with gr.Row():
+            paletteDropdown = gr.Dropdown(choices=refreshPalettes(), label="Palette", value="None", type="value")
+            create_refresh_button(paletteDropdown, refreshPalettes, lambda: {"choices": refreshPalettes()}, None)
+        with gr.Row():
+            paletteURL = gr.Textbox(max_lines=1, placeholder="Image URL (example:https://lospec.com/palette-list/pear36-1x.png)", label="Palette URL")
+        with gr.Row():
             palette = gr.Image(label="Palette image")
 
-        return [downscale, original, scale, palette, clusters, dither, ditherStrength]
+        return [downscale, original, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength]
 
-    def run(self, p, downscale, original, scale, palette, clusters, dither, ditherStrength):
+    def run(self, p, downscale, original, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength):
         
         if ditherStrength > 0:
             print(f'Palettizing output to {clusters} colors with order {2**(dither+1)} dithering...')
         else:
             print(f'Palettizing output to {clusters} colors...')
+
+        if paletteDropdown != "None":
+            palette = cv2.cvtColor(cv2.imread("./extensions/sd-palettize/palettes/"+paletteDropdown), cv2.COLOR_RGB2BGR)
+        
+        if paletteURL is not None:
+            try:
+                palette = np.array(Image.open(BytesIO(requests.get(paletteURL).content)).convert("RGB")).astype(np.uint8)
+            except:
+                print("An error occured fetching image from URL")
 
         processed = process_images(p)
 

@@ -8,3 +8,14 @@ Examples of Palettize, as well as an [Aseprite](https://www.aseprite.org/) compa
 ## Installation
 Copy this repo's URL (https://github.com/Astropulse/sd-palettize) into the "Install from URL" section of the Extensions tab of Automatic1111's webui.
 You will need to restart webui to install the required dependencies.
+
+## Palette Credit
+ENDESGA
+Adigun A. Polack
+Luis Miguel Maldonado
+PICO-8
+Gabriel C.
+Nintendo
+Commodore
+Microsoft
+Atari
