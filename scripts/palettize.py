@@ -156,8 +156,8 @@ class Script(scripts.Script):
             if grid:
                 processed.images[0] = images.image_grid(processed.images[1:generations], p.batch_size)
         
-                if opts.grid_save:
-                    images.save_image(processed.images[0], p.outpath_grids, "palettized", prompt=p.prompt, seed=processed.seed, grid=True, p=p)
+        if opts.grid_save:
+            images.save_image(processed.images[0], p.outpath_grids, "palettized", prompt=p.prompt, seed=processed.seed, grid=True, p=p)
 
         if original:
             processed.images.extend(originalImgs)
