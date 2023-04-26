@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 import os, requests
 from io import BytesIO
+from itertools import product
 
 from modules import images
 from modules.processing import process_images
@@ -27,6 +28,18 @@ def adjust_gamma(image, gamma=1.0):
 
     # Apply the gamma correction using the lookup table
     return image.point(gamma_table)
+
+def kCentroid(image: Image, width: int, height: int, centroids: int):
+    image = image.convert("RGB")
+    downscaled = np.zeros((height, width, 3), dtype=np.uint8)
+    wFactor = image.width/width
+    hFactor = image.height/height
+    for x, y in product(range(width), range(height)):
+            tile = image.crop((x*wFactor, y*hFactor, (x*wFactor)+wFactor, (y*hFactor)+hFactor)).quantize(colors=centroids, method=1, kmeans=centroids).convert("RGB")
+            color_counts = tile.getcolors()
+            most_common_color = max(color_counts, key=lambda x: x[0])[1]
+            downscaled[y, x, :] = most_common_color
+    return Image.fromarray(downscaled, mode='RGB')
 
 # Runs cv2 k_means quantization on the provided image with "k" color indexes
 def palettize(input, colors, palImg, dithering, strength):
@@ -92,6 +105,9 @@ class Script(scripts.Script):
             downscale = gr.Checkbox(label='Downscale before processing', value=True)
             original = gr.Checkbox(label='Show original images', value=False)
         with gr.Row():
+            kcentroid = gr.Checkbox(label='Use K-Centroid algorithm for downscaling', value=True)
+            centroids = gr.Slider(minimum=2, maximum=16, step=1, label='Centroids', value=2)
+        with gr.Row():
             scale = gr.Slider(minimum=2, maximum=32, step=1, label='Downscale factor', value=8)
         with gr.Row():
             dither = gr.Dropdown(choices=["Bayer 2x2", "Bayer 4x4", "Bayer 8x8"], label="Matrix Size", value="Bayer 8x8", type="index")
@@ -104,9 +120,9 @@ class Script(scripts.Script):
         with gr.Row():
             palette = gr.Image(label="Palette image")
 
-        return [downscale, original, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength]
+        return [downscale, original, kcentroid, centroids, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength]
 
-    def run(self, p, downscale, original, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength):
+    def run(self, p, downscale, original, kcentroid, centroids, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength):
         
         if ditherStrength > 0:
             print(f'Palettizing output to {clusters} colors with order {2**(dither+1)} dithering...')
@@ -143,7 +159,11 @@ class Script(scripts.Script):
                 originalImgs.append(img)
 
             if downscale:
-                img = cv2.resize(img, (int(img.shape[1]/scale), int(img.shape[0]/scale)), interpolation = cv2.INTER_LINEAR)
+                if kcentroid:
+                    img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).convert("RGB")
+                    img = cv2.cvtColor(np.asarray(kCentroid(img, int(img.width/scale), int(img.height/scale), centroids)), cv2.COLOR_RGB2BGR)
+                else:
+                    img = cv2.resize(img, (int(img.shape[1]/scale), int(img.shape[0]/scale)), interpolation = cv2.INTER_LINEAR)
 
             img = palettize(img, clusters, palette, dither, ditherStrength)
 
