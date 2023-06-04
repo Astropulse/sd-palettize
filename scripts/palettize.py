@@ -17,7 +17,7 @@ from modules.shared import opts
 script_dir = scripts.basedir()
 
 def refreshPalettes():
-    palettes = ["None"]
+    palettes = ["None", "Automatic"]
     palettes.extend(os.listdir('./extensions/sd-palettize/palettes/'))
     return palettes
 
@@ -40,6 +40,37 @@ def kCentroid(image: Image, width: int, height: int, centroids: int):
             most_common_color = max(color_counts, key=lambda x: x[0])[1]
             downscaled[y, x, :] = most_common_color
     return Image.fromarray(downscaled, mode='RGB')
+
+def determine_best_k(image, max_k):
+    # Convert the image to RGB mode
+    image = image.convert("RGB")
+
+    # Prepare arrays for distortion calculation
+    pixels = np.array(image)
+    pixel_indices = np.reshape(pixels, (-1, 3))
+
+    # Calculate distortion for different values of k
+    distortions = []
+    for k in range(1, max_k + 1):
+        quantized_image = image.quantize(colors=k, method=2, kmeans=k, dither=0)
+        centroids = np.array(quantized_image.getpalette()[:k * 3]).reshape(-1, 3)
+        
+        # Calculate distortions
+        distances = np.linalg.norm(pixel_indices[:, np.newaxis] - centroids, axis=2)
+        min_distances = np.min(distances, axis=1)
+        distortions.append(np.sum(min_distances ** 2))
+
+    # Calculate the rate of change of distortions
+    rate_of_change = np.diff(distortions) / np.array(distortions[:-1])
+    
+    # Find the elbow point (best k value)
+    if len(rate_of_change) == 0:
+        best_k = 2
+    else:
+        elbow_index = np.argmax(rate_of_change) + 1
+        best_k = elbow_index + 2
+
+    return best_k
 
 # Runs cv2 k_means quantization on the provided image with "k" color indexes
 def palettize(input, colors, palImg, dithering, strength):
@@ -129,7 +160,7 @@ class Script(scripts.Script):
         else:
             print(f'Palettizing output to {clusters} colors...')
 
-        if paletteDropdown != "None":
+        if paletteDropdown != "None" and paletteDropdown != "Automatic":
             palette = cv2.cvtColor(cv2.imread("./extensions/sd-palettize/palettes/"+paletteDropdown), cv2.COLOR_RGB2BGR)
         
         if paletteURL is not None:
@@ -164,6 +195,11 @@ class Script(scripts.Script):
                     img = cv2.cvtColor(np.asarray(kCentroid(img, int(img.width/scale), int(img.height/scale), centroids)), cv2.COLOR_RGB2BGR)
                 else:
                     img = cv2.resize(img, (int(img.shape[1]/scale), int(img.shape[0]/scale)), interpolation = cv2.INTER_LINEAR)
+
+            if paletteDropdown == "Automatic":
+                palImg = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).convert("RGB")
+                best_k = determine_best_k(palImg, 64)
+                palette = cv2.cvtColor(np.asarray(palImg.quantize(colors=best_k, method=1, kmeans=best_k, dither=0).convert('RGB')), cv2.COLOR_RGB2BGR)
 
             img = palettize(img, clusters, palette, dither, ditherStrength)
 
