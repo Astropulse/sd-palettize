@@ -187,7 +187,7 @@ class Script(scripts.Script):
             img = np.array(processed.images[i]).astype(np.uint8)
 
             if original:
-                originalImgs.append(img)
+                originalImgs.append(processed.images[i])
 
             if downscale:
                 if kcentroid:
