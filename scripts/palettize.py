@@ -163,7 +163,7 @@ class Script(scripts.Script):
         if paletteDropdown != "None" and paletteDropdown != "Automatic":
             palette = cv2.cvtColor(cv2.imread("./extensions/sd-palettize/palettes/"+paletteDropdown), cv2.COLOR_RGB2BGR)
         
-        if paletteURL is not None:
+        if paletteURL != "":
             try:
                 palette = np.array(Image.open(BytesIO(requests.get(paletteURL).content)).convert("RGB")).astype(np.uint8)
             except:
