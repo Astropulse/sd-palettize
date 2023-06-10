@@ -136,7 +136,7 @@ class Script(scripts.Script):
             downscale = gr.Checkbox(label='Downscale before processing', value=True)
             original = gr.Checkbox(label='Show original images', value=False)
         with gr.Row():
-            upscale = gr.Checkbox(label='Upscale after processing', value=True)
+            upscale = gr.Checkbox(label='Save 1:1 pixel image', value=False)
             kcentroid = gr.Checkbox(label='Use K-Centroid algorithm for downscaling', value=True)
         with gr.Row():
             scale = gr.Slider(minimum=2, maximum=32, step=1, label='Downscale factor', value=8)
@@ -201,13 +201,16 @@ class Script(scripts.Script):
                 best_k = determine_best_k(palImg, 64)
                 palette = cv2.cvtColor(np.asarray(palImg.quantize(colors=best_k, method=1, kmeans=best_k, dither=0).convert('RGB')), cv2.COLOR_RGB2BGR)
 
-            img = palettize(img, clusters, palette, dither, ditherStrength)
+            tempImg = palettize(img, clusters, palette, dither, ditherStrength)
 
-            if downscale and upscale:
-                img = cv2.resize(img, (int(img.shape[1]*scale), int(img.shape[0]*scale)), interpolation = cv2.INTER_NEAREST)
+            if downscale:
+                img = cv2.resize(tempImg, (int(img.shape[1]*scale), int(img.shape[0]*scale)), interpolation = cv2.INTER_NEAREST)
+
+            if not upscale:
+                tempImg = img
 
             processed.images[i] = Image.fromarray(img)
-            images.save_image(processed.images[i], p.outpath_samples, "palettized", processed.seed + i, processed.prompt, opts.samples_format, info=processed.info, p=p)
+            images.save_image(Image.fromarray(tempImg), p.outpath_samples, "palettized", processed.seed + i, processed.prompt, opts.samples_format, info=processed.info, p=p)
 
             if grid:
                 processed.images[0] = images.image_grid(processed.images[1:generations], p.batch_size)
