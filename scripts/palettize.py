@@ -136,8 +136,8 @@ class Script(scripts.Script):
             downscale = gr.Checkbox(label='Downscale before processing', value=True)
             original = gr.Checkbox(label='Show original images', value=False)
         with gr.Row():
+            upscale = gr.Checkbox(label='Upscale after processing', value=True)
             kcentroid = gr.Checkbox(label='Use K-Centroid algorithm for downscaling', value=True)
-            centroids = gr.Slider(minimum=2, maximum=16, step=1, label='Centroids', value=2)
         with gr.Row():
             scale = gr.Slider(minimum=2, maximum=32, step=1, label='Downscale factor', value=8)
         with gr.Row():
@@ -151,9 +151,9 @@ class Script(scripts.Script):
         with gr.Row():
             palette = gr.Image(label="Palette image")
 
-        return [downscale, original, kcentroid, centroids, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength]
+        return [downscale, original, upscale, kcentroid, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength]
 
-    def run(self, p, downscale, original, kcentroid, centroids, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength):
+    def run(self, p, downscale, original, upscale, kcentroid, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength):
         
         if ditherStrength > 0:
             print(f'Palettizing output to {clusters} colors with order {2**(dither+1)} dithering...')
@@ -192,7 +192,7 @@ class Script(scripts.Script):
             if downscale:
                 if kcentroid:
                     img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).convert("RGB")
-                    img = cv2.cvtColor(np.asarray(kCentroid(img, int(img.width/scale), int(img.height/scale), centroids)), cv2.COLOR_RGB2BGR)
+                    img = cv2.cvtColor(np.asarray(kCentroid(img, int(img.width/scale), int(img.height/scale), 2)), cv2.COLOR_RGB2BGR)
                 else:
                     img = cv2.resize(img, (int(img.shape[1]/scale), int(img.shape[0]/scale)), interpolation = cv2.INTER_LINEAR)
 
@@ -203,7 +203,7 @@ class Script(scripts.Script):
 
             img = palettize(img, clusters, palette, dither, ditherStrength)
 
-            if downscale:
+            if downscale and upscale:
                 img = cv2.resize(img, (int(img.shape[1]*scale), int(img.shape[0]*scale)), interpolation = cv2.INTER_NEAREST)
 
             processed.images[i] = Image.fromarray(img)
