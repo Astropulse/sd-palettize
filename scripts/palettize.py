@@ -15,10 +15,12 @@ from modules.ui import create_refresh_button
 from modules.shared import opts
 
 script_dir = scripts.basedir()
+pal_path='./extensions/sd-palettize/palettes/'
 
 def refreshPalettes():
     palettes = ["None", "Automatic"]
-    palettes.extend(os.listdir('./extensions/sd-palettize/palettes/'))
+    file_names = [fn for fn in sorted(os.listdir(pal_path)) if ".preview." not in fn]
+    palettes.extend(file_names)
     return palettes
 
 def adjust_gamma(image, gamma=1.0):
@@ -54,7 +56,7 @@ def determine_best_k(image, max_k):
     for k in range(1, max_k + 1):
         quantized_image = image.quantize(colors=k, method=2, kmeans=k, dither=0)
         centroids = np.array(quantized_image.getpalette()[:k * 3]).reshape(-1, 3)
-        
+
         # Calculate distortions
         distances = np.linalg.norm(pixel_indices[:, np.newaxis] - centroids, axis=2)
         min_distances = np.min(distances, axis=1)
@@ -62,7 +64,7 @@ def determine_best_k(image, max_k):
 
     # Calculate the rate of change of distortions
     rate_of_change = np.diff(distortions) / np.array(distortions[:-1])
-    
+
     # Find the elbow point (best k value)
     if len(rate_of_change) == 0:
         best_k = 2
@@ -89,14 +91,14 @@ def palettize(input, colors, palImg, dithering, strength):
     palette = []
 
     threshold = (16*strength)/4
-    
+
     if palImg is not None:
 
         numColors = len(palImg.getcolors(16777216))
 
         if strength > 0:
             img = adjust_gamma(img, 1.0-(0.02*strength))
-            for i in palImg.getcolors(16777216): 
+            for i in palImg.getcolors(16777216):
                 palette.append(i[1])
             palette = hitherdither.palette.Palette(palette)
             img_indexed = hitherdither.ordered.bayer.bayer_dithering(img, palette, [threshold, threshold, threshold], order=2**dithering).convert('RGB')
@@ -113,7 +115,7 @@ def palettize(input, colors, palImg, dithering, strength):
         if strength > 0:
             img_indexed = img.quantize(colors=colors, method=1, kmeans=colors, dither=0).convert('RGB')
             img = adjust_gamma(img, 1.0-(0.03*strength))
-            for i in img_indexed.convert("RGB").getcolors(16777216): 
+            for i in img_indexed.convert("RGB").getcolors(16777216):
                 palette.append(i[1])
             palette = hitherdither.palette.Palette(palette)
             img_indexed = hitherdither.ordered.bayer.bayer_dithering(img, palette, [threshold, threshold, threshold], order=2**dithering).convert('RGB')
@@ -123,6 +125,14 @@ def palettize(input, colors, palImg, dithering, strength):
 
     result = cv2.cvtColor(np.asarray(img_indexed), cv2.COLOR_RGB2BGR)
     return result
+
+def updatePreview(evt: gr.SelectData):
+    if evt.index > 1:
+        name, ext = os.path.splitext(evt.value)
+        preview_filename=pal_path + name + ".preview" + ext
+        if os.path.isfile(preview_filename):
+            return Image.open(preview_filename)
+    return None
 
 class Script(scripts.Script):
     def title(self):
@@ -147,22 +157,26 @@ class Script(scripts.Script):
             paletteDropdown = gr.Dropdown(choices=refreshPalettes(), label="Palette", value="None", type="value")
             create_refresh_button(paletteDropdown, refreshPalettes, lambda: {"choices": refreshPalettes()}, None)
         with gr.Row():
+            palettePreview = gr.Image(height=120,width=464,interactive=False,show_label=False,show_download_button=False)
+        with gr.Row():
             paletteURL = gr.Textbox(max_lines=1, placeholder="Image URL (example:https://lospec.com/palette-list/pear36-1x.png)", label="Palette URL")
         with gr.Row():
             palette = gr.Image(label="Palette image")
 
+        paletteDropdown.select(updatePreview,outputs=palettePreview)
+
         return [downscale, original, upscale, kcentroid, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength]
 
     def run(self, p, downscale, original, upscale, kcentroid, scale, paletteDropdown, paletteURL, palette, clusters, dither, ditherStrength):
-        
+
         if ditherStrength > 0:
             print(f'Palettizing output to {clusters} colors with order {2**(dither+1)} dithering...')
         else:
             print(f'Palettizing output to {clusters} colors...')
 
         if paletteDropdown != "None" and paletteDropdown != "Automatic":
-            palette = cv2.cvtColor(cv2.imread("./extensions/sd-palettize/palettes/"+paletteDropdown), cv2.COLOR_RGB2BGR)
-        
+            palette = cv2.cvtColor(cv2.imread(pal_path+paletteDropdown), cv2.COLOR_RGB2BGR)
+
         if paletteURL != "":
             try:
                 palette = np.array(Image.open(BytesIO(requests.get(paletteURL).content)).convert("RGB")).astype(np.uint8)
@@ -214,7 +228,7 @@ class Script(scripts.Script):
 
             if grid:
                 processed.images[0] = images.image_grid(processed.images[1:generations], p.batch_size)
-        
+
         if opts.grid_save:
             images.save_image(processed.images[0], p.outpath_grids, "palettized", prompt=p.prompt, seed=processed.seed, grid=True, p=p)
 
